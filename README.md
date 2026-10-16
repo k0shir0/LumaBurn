@@ -1,17 +1,14 @@
-<h1 align="center">LumaBurn</h1>
+<p align="center">
+  <img src="docs/brand/lumaburn-logo.png" alt="LumaBurn" width="660">
+</p>
 
 Create video DVDs, burn data discs, convert video and audio, and copy files to USB
 storage. LumaBurn runs locally on Windows.
 
 ## Requirements
 
-- Windows 10 or 11 and [Python 3.11+](https://www.python.org/downloads/windows/).
+- 64-bit Intel/AMD Windows 10 or 11 and [Python 3.11+](https://www.python.org/downloads/windows/).
   Enable **Add Python to PATH** when installing Python.
-- [FFmpeg and FFprobe](https://ffmpeg.org/download.html) for conversion. Use a
-  current Windows build, preferably FFmpeg 8 or newer, and add its `bin` folder
-  to your PATH. Original-file copies and data discs do not need these tools.
-- **dvdauthor** for DVD-player output. Install
-  [DVDStyler](https://www.dvdstyler.org/en/downloads), or use the setup below.
 - An optical **writer** and compatible blank media for burning. ISO export does
   not require a connected writer.
 
@@ -19,30 +16,29 @@ No account or additional Python packages are required.
 
 ## Setup and launch
 
-Download or clone the project into a folder. To get the DVD authoring engine
-without installing DVDStyler system-wide, run this from that folder:
+Download or clone the project into a folder and double-click **Launch.cmd**.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Setup-tools.ps1
-```
+LumaBurn opens and automatically prepares any missing FFmpeg, FFprobe, and DVD
+authoring tools. First launch needs an internet connection; progress appears at
+the top of the app. If a download fails, select **Retry setup** there.
+Existing tools are reused, and later launches work offline once setup finishes.
+No setup commands, PATH edits, or administrator access are needed for these tools.
 
-The setup downloads pinned upstream packages, verifies their SHA-256 hashes, and
-extracts the tools locally. Install FFmpeg and FFprobe separately.
-
-Double-click **Launch.cmd**, or run this from the project folder:
-
-```powershell
-python -m lumaburn
-```
+You can also start it with `python -m lumaburn` from the project folder.
 
 The app opens at <http://127.0.0.1:9847>. Closing its window leaves the server
 running so an active burn can finish; use **Launch.cmd** to reopen it. When
 started in a console, **Ctrl+C** waits for an active disc write before shutdown.
 
-Check **Devices** for tool availability. Restart LumaBurn after installing tools
-or changing PATH. Custom executable paths can be set with `LUMABURN_FFMPEG`,
-`LUMABURN_FFPROBE`, and `LUMABURN_DVDAUTHOR`. A local `dvdauthor.exe` and its DLLs
-can also go in `tools/`.
+Check **Devices** for tool availability. Setup verifies SHA-256 hashes before
+extracting pinned upstream packages into `tools/`, without running an installer.
+It uses FFmpeg's linked [Gyan Windows build](https://www.gyan.dev/ffmpeg/builds/)
+and extracts the authoring engine from [DVDStyler](https://www.dvdstyler.org/).
+Downloads are cached under `.local/dependencies/` for retries.
+
+For an existing custom installation, `LUMABURN_FFMPEG`, `LUMABURN_FFPROBE`, and
+`LUMABURN_DVDAUTHOR` override detection. Tools on PATH and an installed DVDStyler
+are also detected. Restart after changing these paths.
 
 ## Output formats
 

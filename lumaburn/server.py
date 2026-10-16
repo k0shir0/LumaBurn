@@ -19,6 +19,7 @@ import webbrowser
 from . import media
 from . import compression
 from . import dvdtests
+from . import setup
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCAL = ROOT / ".local"
@@ -35,6 +36,39 @@ REFRESHING = False
 DEVICE_REFRESH_SECONDS = 10
 DEFAULT_OUTPUT = str(LOCAL / "exports")
 PORT = 9847
+TOOL_SETUP = {"state": "idle", "message": "", "progress": None}
+
+
+def start_tool_setup():
+    with LOCK:
+        if TOOL_SETUP["state"] == "running":
+            return
+        require_idle()
+        TOOL_SETUP.update(state="running", message="Checking media tools…", progress=None)
+        threading.Thread(target=prepare_tools, daemon=True).start()
+
+
+def prepare_tools():
+    def update(**changes):
+        with LOCK:
+            TOOL_SETUP.update(changes)
+    try:
+        setup.install(update)
+        # Files queued after a failed download may have been added without FFprobe.
+        with LOCK:
+            queued = list(FILES.values())
+        for record in queued:
+            try:
+                metadata = media.probe(Path(record["path"]))
+            except OSError:
+                continue
+            with LOCK:
+                if FILES.get(record["id"]) is record:
+                    record.pop("error", None)
+                    record.update(metadata)
+        update(state="completed", message="Media tools are ready.", progress=100)
+    except Exception as exc:
+        update(state="failed", message=f"Tool setup could not finish. {exc}", progress=None)
 
 
 def native(action: str, request: dict | None = None, job=None, timeout=60) -> dict:
@@ -134,6 +168,9 @@ def monitor_devices(stop):
 
 
 def add_file(path: Path, uploaded=False):
+    with LOCK:
+        if TOOL_SETUP["state"] == "running":
+            raise ValueError("Wait for media tool setup to finish before adding files.")
     path = path.resolve(strict=True)
     if not path.is_file():
         raise ValueError("Only regular files can be added.")
@@ -151,6 +188,7 @@ def public_file(file):
 def snapshot():
     with LOCK:
         result = {"files": [public_file(f) for f in FILES.values()], "devices": copy.deepcopy(DEVICES), "tools": media.tools_status(), "job": copy.deepcopy(CURRENT_JOB.data) if CURRENT_JOB else None, "compression": copy.deepcopy(COMPRESSION_TASK.data) if COMPRESSION_TASK else None, "testing": TESTING, "presets": media.PRESETS, "default_output": DEFAULT_OUTPUT, "session_token": TOKEN, "refreshing": REFRESHING, "device_refresh_seconds": DEVICE_REFRESH_SECONDS}
+        result["setup"] = TOOL_SETUP.copy()
     diagnostics = LOCAL / "drive-test.json"
     if diagnostics.is_file():
         try:
@@ -309,6 +347,8 @@ class CompressionTask:
 
 def require_idle():
     # Called under LOCK so tests, estimation, and media preparation cannot race at admission.
+    if TOOL_SETUP["state"] == "running":
+        raise ValueError("Media tools are being prepared. Wait for setup to finish.")
     if TESTING or (CURRENT_JOB and CURRENT_JOB.data["state"] in {"queued", "running"}) or (COMPRESSION_TASK and COMPRESSION_TASK.data["state"] in {"queued", "running"}):
         raise ValueError("Wait for the current media job, estimate, or disc test to finish.")
 
@@ -397,6 +437,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/refresh":
                 threading.Thread(target=refresh_devices, daemon=True).start()
                 self.json({"ok": True})
+            elif path == "/api/setup":
+                start_tool_setup()
+                self.json(snapshot(), 202)
             elif path == "/api/pick-files":
                 paths = picker("pick-files").get("paths", [])
                 for selected in paths:
@@ -560,6 +603,7 @@ def main():
     PORT = args.port
     LOCAL.mkdir(exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    start_tool_setup()
     stop_monitor = threading.Event()
     device_thread = threading.Thread(target=monitor_devices, args=(stop_monitor,), daemon=True)
     device_thread.start()
