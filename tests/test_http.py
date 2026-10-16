@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lumaburn import server
@@ -41,6 +42,16 @@ class HttpTests(unittest.TestCase):
         status, response = self.request("POST", "/api/plan", headers={"X-Luma-Token": server.TOKEN}, body=b'{"preset":"usb-original","file_ids":[]}')
         self.assertEqual(status, 200)
         self.assertFalse(response["can_start"])
+
+    def test_tool_setup_retry_requires_current_token(self):
+        with patch("lumaburn.server.start_tool_setup") as start:
+            status, _ = self.request("POST", "/api/setup", body=b"{}")
+            self.assertEqual(status, 403)
+            start.assert_not_called()
+            status, response = self.request("POST", "/api/setup", headers={"X-Luma-Token": server.TOKEN}, body=b"{}")
+            self.assertEqual(status, 202)
+            start.assert_called_once()
+            self.assertIn("setup", response)
 
     def test_host_and_origin_are_rejected(self):
         for headers in [{"Host": "evil.example"}, {"Origin": "https://evil.example"}]:
