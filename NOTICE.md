@@ -22,7 +22,7 @@ retain their own licenses; LumaBurn's MIT license does not relicense them.
 | FFmpeg and FFprobe | [LGPL 2.1 or later; GPL when built with GPL components](https://ffmpeg.org/legal.html) |
 | dvdauthor | [GNU GPL](https://dvdauthor.sourceforge.net/) |
 | DVDStyler | [GNU GPL](https://www.dvdstyler.org/) |
-| innoextract, used by optional setup | [zlib license](https://github.com/dscharrer/innoextract/blob/master/LICENSE) |
+| innoextract, used by automatic setup | [zlib license](https://github.com/dscharrer/innoextract/blob/master/LICENSE) |
 | 7-Zip, optional | [LGPL, BSD, and unRAR restrictions for relevant components](https://www.7-zip.org/license.txt) |
 | WinRAR / Rar.exe, optional | [Proprietary license](https://www.rarlab.com/license.htm) |
 

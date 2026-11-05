@@ -88,6 +88,10 @@ function activeCompression() {
   return ["queued", "running"].includes(state?.compression?.state);
 }
 
+function settingUp() {
+  return state?.setup?.state === "running";
+}
+
 function selectedFiles() {
   return (state?.files || []).filter((file) => !excludedFiles.has(file.id));
 }
@@ -250,7 +254,7 @@ async function action(task) {
 }
 
 function updateControls() {
-  const locked = busyCount > 0 || uploading || Boolean(activeJob());
+  const locked = busyCount > 0 || uploading || Boolean(activeJob()) || settingUp();
   const empty = !selectedFiles().length;
   const validLabel = !isDisc() || /^[A-Za-z0-9 _-]{1,32}$/.test($("disc-label").value.trim());
   const valid = online && !locked && !activeCompression() && !state?.testing && !planning && !empty && validLabel && !destinationUnavailable() && plan?.can_start === true;
@@ -276,10 +280,12 @@ function updateControls() {
   $("estimate-compression").disabled = inspecting || !$("compression-path").value.trim();
   for (const id of ["open-7z", "open-winrar"]) $(id).disabled = !online || busyCount > 0;
   $("cancel-compression").disabled = !online || busyCount > 0;
+  $("retry-setup").disabled = inspecting || uploading;
   $("media-heading").closest("section").setAttribute("aria-busy", String(uploading));
   $("prepare-button").setAttribute("aria-describedby", isDisc() ? "action-hint plan-feedback" : "action-hint plan-feedback usb-target-hint");
   $("burn-button").setAttribute("aria-describedby", "recorder-hint plan-feedback");
-  if (activeJob()) $("action-hint").textContent = "A project is running. Your queue is locked until it finishes.";
+  if (settingUp()) $("action-hint").textContent = "Preparing media tools. You can add files when setup finishes.";
+  else if (activeJob()) $("action-hint").textContent = "A project is running. Your queue is locked until it finishes.";
   else if (activeCompression()) $("action-hint").textContent = "Wait for the compression estimate to finish before preparing media.";
   else if (state?.testing) $("action-hint").textContent = "Wait for the read-only checks to finish before preparing media.";
   else if (destinationUnavailable()) $("action-hint").textContent = "Reconnect the selected USB drive or choose another destination.";
@@ -392,11 +398,20 @@ function renderDevices() {
 }
 
 function renderDependencies() {
+  const setup = state?.setup;
+  const failed = setup?.state === "failed";
+  $("setup-notice").hidden = !settingUp() && !failed;
+  $("setup-title").textContent = failed ? "Media tool setup needs attention" : "Preparing media tools";
+  $("setup-message").textContent = setup?.message || "";
+  $("retry-setup").hidden = !failed;
+  $("setup-progress").hidden = !settingUp();
+  if (Number.isFinite(setup?.progress)) $("setup-progress").value = setup.progress;
+  else $("setup-progress").removeAttribute("value");
   const tools = state?.tools || {};
   const needs = preset() === "dvd-video" ? ["ffmpeg", "ffprobe", "dvdauthor"] : ["usb-compatible", "mp3"].includes(preset()) ? ["ffmpeg", "ffprobe"] : [];
   const missing = needs.filter((name) => !tools[name]);
-  $("dependency-notice").hidden = !state || missing.length === 0;
-  $("dependency-message").textContent = `This format needs ${missing.join(", ")}. Install the missing tools to prepare your media.`;
+  $("dependency-notice").hidden = !state || missing.length === 0 || settingUp() || failed;
+  $("dependency-message").textContent = `This format needs ${missing.join(", ")}. Reopen LumaBurn to prepare the missing tools automatically.`;
 }
 
 function renderFormat() {
@@ -647,6 +662,7 @@ async function runTests() {
 function applyState(result) {
   if (!result || !Array.isArray(result.files)) return;
   const hadJob = Boolean(activeJob());
+  const wasSettingUp = settingUp();
   state = result;
   setConnection(true);
   const filesChanged = renderFiles();
@@ -656,7 +672,7 @@ function applyState(result) {
   renderJob();
   renderCompression();
   updateControls();
-  if (filesChanged || oldDevices !== deviceSignature || destinationChanged || hadJob !== Boolean(activeJob())) schedulePlan();
+  if (filesChanged || oldDevices !== deviceSignature || destinationChanged || hadJob !== Boolean(activeJob()) || wasSettingUp !== settingUp()) schedulePlan();
 }
 
 async function loadState() {
@@ -678,12 +694,12 @@ async function poll() {
     if (wasOnline || !state) showError(error);
   } finally {
     pollInFlight = false;
-    pollTimer = setTimeout(poll, activeJob() || activeCompression() ? 1500 : 5000);
+    pollTimer = setTimeout(poll, activeJob() || activeCompression() || settingUp() ? 1500 : 5000);
   }
 }
 
 function pickFiles() {
-  if (!online || busyCount || uploading || activeJob()) return;
+  if (!online || busyCount || uploading || activeJob() || settingUp()) return;
   return action(async () => {
     mutationVersion += 1;
     const result = await api("/api/pick-files", { method: "POST" });
@@ -725,7 +741,7 @@ function uploadFile(file, index, count) {
 
 async function uploadFiles(files) {
   if (!files.length) return;
-  if (!online || busyCount || uploading || activeJob()) { showError("Wait for the current operation to finish before adding files."); return; }
+  if (!online || busyCount || uploading || activeJob() || settingUp()) { showError("Wait for the current operation to finish before adding files."); return; }
   uploading = true;
   mutationVersion += 1;
   $("upload-status").hidden = false;
@@ -757,6 +773,12 @@ async function startJob(actionName, body) {
 }
 
 $("add-files").addEventListener("click", pickFiles);
+$("retry-setup").addEventListener("click", () => action(async () => {
+  mutationVersion += 1;
+  applyState(await api("/api/setup", { method: "POST" }));
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, 1500);
+}));
 $("select-all").addEventListener("change", () => {
   excludedFiles.clear();
   if (!$("select-all").checked) for (const file of state?.files || []) excludedFiles.add(file.id);

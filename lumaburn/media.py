@@ -33,6 +33,11 @@ def tool_path(name: str) -> str | None:
     found = shutil.which(name)
     if found:
         return found
+    if name in {"ffmpeg", "ffprobe", "dvdauthor"}:
+        bundle = ROOT / "tools" / ("authoring" if name == "dvdauthor" else "ffmpeg")
+        candidate = bundle / "bin" / (name + ".exe")
+        if (bundle / ".ready").is_file() and candidate.is_file():
+            return str(candidate)
     if name == "dvdauthor":
         bundled = ROOT / "tools" / "DVDStyler" / "bin" / "dvdauthor.exe"
         if bundled.is_file():
@@ -133,7 +138,7 @@ def make_plan(request: dict, files: list[dict], devices: dict) -> dict:
         notes.append("Conversion uses the first video and audio streams. Alternate tracks and subtitles are not carried over; keep originals to preserve them.")
     if preset == "dvd-video":
         if not tool_path("dvdauthor"):
-            errors.append("DVD authoring is missing. Install DVDStyler, or put dvdauthor.exe and its DLLs in tools/.")
+            errors.append("DVD authoring tools are missing. Check automatic setup at the top of the app.")
         if duration > 0:
             bitrate = min(8_000_000, int(capacity * 0.92 * 8 / duration - 192_000))
             if bitrate < 1_000_000:

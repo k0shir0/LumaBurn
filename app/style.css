@@ -238,6 +238,11 @@ select option { background: #1b242c; color: var(--text); }
 .error-notice { color: var(--danger); background: #bd5d6809; border-color: #ffa6a924; }
 .dependency-notice { color: var(--warning); background: #bda06a08; border-color: #eac99124; }
 .dependency-notice a { color: var(--warning); text-decoration: underline; white-space: nowrap; font-size: 10px; }
+.setup-notice { color: var(--accent); background: #6fc7ae08; border-color: #6fc7ae35; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.setup-status { flex: 1; min-width: 180px; display: grid; gap: 6px; }
+.setup-status strong { font-weight: 600; }
+.setup-status span { color: var(--muted); }
+.setup-status progress { width: 100%; max-width: 420px; height: 6px; accent-color: var(--accent); }
 .plan-feedback { padding: 11px 4px 0; color: var(--muted); font-size: 10px; }
 .plan-feedback.has-errors { color: var(--danger); }
 .plan-feedback ul { margin: 0; padding-left: 16px; }

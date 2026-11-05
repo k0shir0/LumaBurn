@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="440" viewBox="0 0 1920 440" role="img" aria-label="LumaBurn">
+  <defs>
+    <mask id="disc"><rect width="440" height="440" fill="white"/><circle cx="232" cy="220" r="37" fill="black"/></mask>
+  </defs>
+  <rect width="1920" height="440" fill="white"/>
+  <g mask="url(#disc)">
+    <circle cx="232" cy="220" r="164" fill="#6fc7ae"/>
+    <path d="M232 220 120 100A164 164 0 0 1 198 60Z M232 220 344 340A164 164 0 0 1 266 380Z" fill="#b8e8d9"/>
+    <circle cx="232" cy="220" r="143" fill="none" stroke="#4fa98f" stroke-width="3"/>
+    <circle cx="232" cy="220" r="64" fill="none" stroke="#4fa98f" stroke-width="8"/>
+  </g>
+  <text x="461" y="309" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="272" letter-spacing="-9"><tspan fill="#142b38">Luma</tspan><tspan fill="#6fc7ae">Burn</tspan></text>
+</svg>

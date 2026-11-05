@@ -9,10 +9,9 @@ JavaScript checks.
 
 | Path | Contents |
 | --- | --- |
-| `lumaburn/` | Application package (`server.py`, `media.py`, `compression.py`, `dvdtests.py`). |
+| `lumaburn/` | Application package, including automatic tool setup in `setup.py`. |
 | `app/` | Browser interface (`index.html`, `app.js`, `style.css`). |
 | `native/` | Windows PowerShell helpers for file pickers and IMAPI disc operations. |
-| `scripts/` | Setup helpers such as `Setup-tools.ps1`. |
 | `docs/` | Reference documentation. |
 | `tests/` | Python and Node regression checks. |
 
@@ -42,5 +41,12 @@ validated on Linux or macOS. Physical DVD-player compatibility is a manual check
 - Keep generated media, logs, downloaded tools, and local evidence under ignored
   `.local/` or `tools/`.
 - Do not commit drive identifiers, machine-specific paths, or user media.
-- `scripts/Setup-tools.ps1` downloads hash-checked upstream packages into ignored
-  `tools/`.
+- Startup runs `lumaburn/setup.py` in a background thread. It reuses detected
+  tools, then downloads any missing hash-pinned packages into `.local/dependencies/`
+  and extracts them into ignored `tools/`. `GET /api/state` includes setup status;
+  token-protected `POST /api/setup` retries failed setup while the app is idle.
+- Automatic FFmpeg setup uses Gyan 9.0.2 essentials (linked from FFmpeg's download
+  page). DVD authoring retains the pinned DVDStyler 3.2.1 and innoextract 1.9
+  packages. Keep download URLs and SHA-256 hashes together when updating them.
+- Managed tool folders become visible to detection only after a `.ready` marker
+  is written. Failed downloads or extraction leave setup retryable.
