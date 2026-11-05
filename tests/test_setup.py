@@ -4,6 +4,8 @@ import io
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -26,6 +28,58 @@ def response(payload):
 
 
 class SetupTests(unittest.TestCase):
+    def test_setup_waits_for_admitted_file_probe_before_reprobing_queue(self):
+        state = {"state": "failed", "message": "offline", "progress": None}
+        probing = threading.Event()
+        release_probe = threading.Event()
+        setup_started = threading.Event()
+        setup_finished = threading.Event()
+        results = []
+        prepare_tools = server.prepare_tools
+
+        def prepare():
+            try:
+                prepare_tools()
+            finally:
+                setup_finished.set()
+
+        def probe(path):
+            if not probing.is_set():
+                probing.set()
+                if not release_probe.wait(5):
+                    raise RuntimeError("Test probe was not released")
+                return {"duration": 0, "error": "FFprobe is missing"}
+            return {"duration": 12, "video": True}
+
+        def retry():
+            server.start_tool_setup()
+            setup_started.set()
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(server, "TOOL_SETUP", state), patch.object(server, "FILES", {}), patch("lumaburn.media.probe", side_effect=probe), patch("lumaburn.setup.install"), patch.object(server, "prepare_tools", side_effect=prepare):
+            source = Path(temporary) / "video.mkv"
+            source.touch()
+            adding = threading.Thread(target=lambda: results.append(server.add_file(source)))
+            adding.start()
+            self.assertTrue(probing.wait(5))
+            retrying = threading.Thread(target=retry)
+            retrying.start()
+            try:
+                self.assertFalse(setup_started.wait(.1))
+                # File probing must not monopolize the state lock.
+                self.assertTrue(server.LOCK.acquire(timeout=1))
+                server.LOCK.release()
+            finally:
+                release_probe.set()
+                adding.join(5)
+                retrying.join(5)
+            self.assertFalse(adding.is_alive())
+            self.assertFalse(retrying.is_alive())
+            self.assertTrue(setup_finished.wait(5))
+            self.assertEqual(state["state"], "completed")
+            record = server.FILES[results[0]["id"]]
+            self.assertEqual(record["duration"], 12)
+            self.assertNotIn("error", record)
+
     def test_verified_cache_is_reused_without_network(self):
         with tempfile.TemporaryDirectory() as temporary:
             cache = Path(temporary)
@@ -96,12 +150,14 @@ class SetupTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(media, "ROOT", Path(temporary)), patch.dict("os.environ", {}, clear=True), patch("lumaburn.media.shutil.which", return_value=None), patch("lumaburn.setup.platform.machine", return_value="AMD64"), patch.object(setup, "FFMPEG", packages[0]), patch.object(setup, "DVDSTYLER", packages[1]), patch.object(setup, "INNOEXTRACT", packages[2]), patch("lumaburn.setup.urlopen", side_effect=lambda request, **_: response(payloads[request.full_url])) as network, patch("lumaburn.setup.subprocess.run", side_effect=extract) as process:
-            setup.install(lambda **_: None)
+            with patch.object(setup, "os", SimpleNamespace(name="nt")):
+                setup.install(lambda **_: None)
             self.assertTrue(all(media.tool_path(name) for name in setup.REQUIRED))
             self.assertTrue((media.ROOT / "tools/authoring/bin/required.dll").is_file())
             self.assertEqual(network.call_count, 3)
             process.assert_called_once()
-            setup.install(lambda **_: None)
+            with patch.object(setup, "os", SimpleNamespace(name="nt")):
+                setup.install(lambda **_: None)
             self.assertEqual(network.call_count, 3, "A second launch must not download anything")
             self.assertEqual(process.call_count, 1)
 

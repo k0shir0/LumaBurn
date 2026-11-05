@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCAL = ROOT / ".local"
 TOKEN = secrets.token_urlsafe(32)
 LOCK = threading.RLock()
+FILE_ADMISSION_LOCK = threading.Lock()
 PICKER_LOCK = threading.Lock()
 DEVICE_READY = threading.Condition(LOCK)
 FILES: dict[str, dict] = {}
@@ -40,7 +41,9 @@ TOOL_SETUP = {"state": "idle", "message": "", "progress": None}
 
 
 def start_tool_setup():
-    with LOCK:
+    # Finish admitted probes before setup takes its queue snapshot. Keep slow
+    # probes outside LOCK so status requests remain responsive.
+    with FILE_ADMISSION_LOCK, LOCK:
         if TOOL_SETUP["state"] == "running":
             return
         require_idle()
@@ -168,16 +171,17 @@ def monitor_devices(stop):
 
 
 def add_file(path: Path, uploaded=False):
-    with LOCK:
-        if TOOL_SETUP["state"] == "running":
-            raise ValueError("Wait for media tool setup to finish before adding files.")
-    path = path.resolve(strict=True)
-    if not path.is_file():
-        raise ValueError("Only regular files can be added.")
-    record = media.probe(path)
-    record.update(id=uuid.uuid4().hex, path=str(path), uploaded=uploaded)
-    with LOCK:
-        FILES[record["id"]] = record
+    with FILE_ADMISSION_LOCK:
+        with LOCK:
+            if TOOL_SETUP["state"] == "running":
+                raise ValueError("Wait for media tool setup to finish before adding files.")
+        path = path.resolve(strict=True)
+        if not path.is_file():
+            raise ValueError("Only regular files can be added.")
+        record = media.probe(path)
+        record.update(id=uuid.uuid4().hex, path=str(path), uploaded=uploaded)
+        with LOCK:
+            FILES[record["id"]] = record
     return public_file(record)
 
 
